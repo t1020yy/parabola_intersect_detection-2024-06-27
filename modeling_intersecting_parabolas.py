@@ -219,11 +219,17 @@ def calculate_parabola_parameters(projected_points_cam1):
 
     return parabola_height, parabola_width, branches_height_ratio
 
-def get_simulated_image(parameters: ModelingParabolaParameters, num_parabolas):
+def get_simulated_image(parameters: ModelingParabolaParameters):
     trajectories = []
     x_start_offset = 5
     angle_offset = 10
 
+    img1_combined_list = []
+    img2_combined_list = []
+    projected_points_cam1_list = []
+    projected_points_cam2_list = []
+    trajectory_3d_list = []
+    
     for i in range(num_parabolas):
         parameters.x_start_trajectory = random.uniform(-5, -5)
         parameters.y_start_trajectory = random.uniform(5, 10)
@@ -234,10 +240,11 @@ def get_simulated_image(parameters: ModelingParabolaParameters, num_parabolas):
         v0 = parameters.start_speed
         alpha = parameters.start_angle + (i - num_parabolas // 2) * angle_offset
 
-        trajectory = calculate_trajectory(x0, y0, v0, alpha,parameters)
+        trajectory = calculate_trajectory(x0, y0, v0, alpha, parameters)
         trajectories.append(trajectory)
 
-        trajectory_3ds = [np.array(list(zip(traj[:, 0], traj[:, 1], traj[:, 2]))) for traj in trajectories]
+        trajectory_3d = np.array(list(zip(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2])))
+        trajectory_3d_list.append(trajectory_3d)
 
         cam1 = {
             'R': parameters.cam1_R,
@@ -252,25 +259,21 @@ def get_simulated_image(parameters: ModelingParabolaParameters, num_parabolas):
             'dist': parameters.cam2_dist
         }
 
-        projected_points_cam1 = []
-        projected_points_cam2 = []
-        for trajectory_3d in trajectory_3ds:
-            proj_cam1, proj_cam2 = project_trajectory_3d(cam1, cam2, trajectory_3d)
-            projected_points_cam1.append(proj_cam1)
-            projected_points_cam2.append(proj_cam2)
+        proj_cam1, proj_cam2 = project_trajectory_3d(cam1, cam2, trajectory_3d)
+        projected_points_cam1_list.append(proj_cam1)
+        projected_points_cam2_list.append(proj_cam2)
 
         H = parameters.image_height
         W = parameters.image_width
-
         THRESHOLD = 0.25
 
-        not_valid_points_cam1 = sum([len(proj_cam1[(proj_cam1[:, 0] < 0) | (proj_cam1[:, 0] > W) |
-                                                (proj_cam1[:, 1] < 0) | (proj_cam1[:, 1] > H)]) for proj_cam1 in projected_points_cam1])
-        not_valid_points_cam2 = sum([len(proj_cam2[(proj_cam2[:, 0] < 0) | (proj_cam2[:, 0] > W) |
-                                                (proj_cam2[:, 1] < 0) | (proj_cam2[:, 1] > H)]) for proj_cam2 in projected_points_cam2])
+        not_valid_points_cam1 = len(proj_cam1[(proj_cam1[:, 0] < 0) | (proj_cam1[:, 0] > W) |
+                                              (proj_cam1[:, 1] < 0) | (proj_cam1[:, 1] > H)])
+        not_valid_points_cam2 = len(proj_cam2[(proj_cam2[:, 0] < 0) | (proj_cam2[:, 0] > W) |
+                                              (proj_cam2[:, 1] < 0) | (proj_cam2[:, 1] > H)])
 
-        total_points_cam1 = sum([len(proj_cam1) for proj_cam1 in projected_points_cam1])
-        total_points_cam2 = sum([len(proj_cam2) for proj_cam2 in projected_points_cam2])
+        total_points_cam1 = len(proj_cam1)
+        total_points_cam2 = len(proj_cam2)
 
         if not_valid_points_cam1 / total_points_cam1 > THRESHOLD or not_valid_points_cam2 / total_points_cam2 > THRESHOLD:
             print("Too many points are outside the image boundaries.")
@@ -283,24 +286,16 @@ def get_simulated_image(parameters: ModelingParabolaParameters, num_parabolas):
         img1 = np.zeros((H, W), dtype=float)
         img2 = np.zeros((H, W), dtype=float)
 
-        for proj_cam1 in projected_points_cam1:
-            img1 = add_intensity_subpixel(img1, d, proj_cam1[:, 0], proj_cam1[:, 1], delta_x, delta_y)
-        for proj_cam2 in projected_points_cam2:
-            img2 = add_intensity_subpixel(img2, d, proj_cam2[:, 0], proj_cam2[:, 1], delta_x, delta_y)
+        img1 = add_intensity_subpixel(img1, d, proj_cam1[:, 0], proj_cam1[:, 1], delta_x, delta_y)
+        img2 = add_intensity_subpixel(img2, d, proj_cam2[:, 0], proj_cam2[:, 1], delta_x, delta_y)
 
         img1_combined = (img1 / np.max(img1) * 30).astype(np.uint8)
         img2_combined = (img2 / np.max(img2) * 30).astype(np.uint8)
 
-    return img1_combined, img2_combined, projected_points_cam1, projected_points_cam2, trajectory_3ds
+        img1_combined_list.append(img1_combined)
+        img2_combined_list.append(img2_combined)
 
-# def flatten_and_save_projected_points(projected_points, filename):
-#     all_points = np.vstack(projected_points)
-#     np.savetxt(filename, all_points, delimiter=',')
-#     print(f"Saved {filename}")
-
-# def load_and_display_projected_points(filename, title):
-#     data = np.loadtxt(filename, delimiter=',')
-#     print(f"Loaded {filename} data range:", data.min(), data.max())
+    return img1_combined_list, img2_combined_list, projected_points_cam1_list, projected_points_cam2_list, trajectory_3d_list
 
 def flatten_and_save_projected_points(projected_points, filename):
     with open(filename, 'w') as f:
@@ -318,145 +313,32 @@ def load_and_display_projected_points(filename, title):
 
 if __name__ == "__main__":
     parameters = ModelingParabolaParameters()
-    num_parabolas = 3  # 可以调整为需要的抛物线数量
+    num_parabolas = 2  # 可以调整为需要的抛物线数量
     os.makedirs("output", exist_ok=True)
     
     for i in range(10):
     
-        img1_combined, img2_combined, projected_points_cam1, projected_points_cam2, trajectory_3ds = get_simulated_image(parameters, num_parabolas=num_parabolas)
-        if img1_combined is not None and img2_combined is not None:
-            print("img1_combined data range before saving:", img1_combined.min(), img1_combined.max())
-            np.savetxt(f'output/img3_combined_{i}.csv', img1_combined, delimiter=',', fmt='%d')
-            np.savetxt(f'output/img4_combined_{i}.csv', img2_combined, delimiter=',', fmt='%d')
-            flatten_and_save_projected_points(projected_points_cam1, f'output/projected_points_cam3_{i}.csv')
-            flatten_and_save_projected_points(projected_points_cam2, f'output/projected_points_cam4_{i}.csv')
-            load_and_display_projected_points(f'output/projected_points_cam3_{i}.csv', f'Projected Points Camera 1 - {i}')
-            load_and_display_projected_points(f'output/projected_points_cam4_{i}.csv', f'Projected Points Camera 2 - {i}')
-
-            plt.imshow(img1_combined, cmap='gray')
-            plt.title(f'Generated Image from Camera 1 - {i}')
+        img1_combined_list, img2_combined_list, projected_points_cam1_list, projected_points_cam2_list, trajectory_3d_list = get_simulated_image(parameters)
+        if img1_combined_list is not None and img2_combined_list is not None:
+            # print("img1_combined data range before saving:", img1_combined_list.min(), img1_combined_list.max())
+            final_img1_combined = np.sum(img1_combined_list, axis=0)
+            np.savez(f'output_1/parabolas_data_cam1_{i}.npz', *img1_combined_list)
+            np.savez(f'output_1/projected_points_cam1_{i}.npz', *projected_points_cam1_list)
+            
+            plt.imshow(final_img1_combined, cmap='gray')
+            plt.title('Generated Image from Camera 1')
             plt.colorbar()
             plt.show()
-            cv2.imwrite(f'output/img3_combined_{i}.bmp', img1_combined)
-            cv2.imwrite(f'output/img4_combined_{i}.bmp', img2_combined)
+            final_img1_combined_uint8 = (final_img1_combined / np.max(final_img1_combined) * 255).astype(np.uint8)
+            
+            cv2.imwrite(f'output_1/final_img1_combined_{i}.bmp', final_img1_combined_uint8)
+
+            # for i in range(num_parabolas):
+            #     np.savetxt(f'img1_combined_{i}.csv', img1_combined_list[i], delimiter=',', fmt='%d')
+            #     np.savetxt(f'projected_points_cam1_{i}.csv', projected_points_cam1_list[i], delimiter=',', fmt='%d')
+
             print(f"Data for image {i} saved successfully.")
         else:
             print("Failed to generate a complete parabolic trajectory image.")
 
-
-
-        # if img1_combined is not None and img2_combined is not None:
-        #     print("img1_combined data range before saving:", img1_combined.min(), img1_combined.max())
-        #     np.savetxt('img1_combined.csv', img1_combined, delimiter=',', fmt='%d')
-        #     np.savetxt('img2_combined.csv', img2_combined, delimiter=',', fmt='%d')
-        #     flatten_and_save_projected_points(projected_points_cam1, 'projected_points_cam1.csv')
-        #     flatten_and_save_projected_points(projected_points_cam2, 'projected_points_cam2.csv')
-        #     load_and_display_projected_points('projected_points_cam1.csv', 'Projected Points Camera 1')
-        #     load_and_display_projected_points('projected_points_cam2.csv', 'Projected Points Camera 2')
-
-        #     plt.imshow(img1_combined, cmap='gray')
-        #     plt.title('Generated Image from Camera 1')
-        #     plt.colorbar()
-        #     plt.show()
-        #     cv2.imwrite('img1_combined.bmp', img1_combined)
-        #     print("Data saved successfully.")
-            
-        # else:
-        #     print("Failed to generate a complete parabolic trajectory image.")
-
-
-
-# def get_simulated_image(parameters: ModelingParabolaParameters):
     
-#     trajectory = calculate_trajectory(parameters)
-#     trajectory_2d_x = trajectory[:, 0]
-#     trajectory_2d_y = trajectory[:, 1]
-#     trajectory_3d_z = trajectory[:, 2]    
-
-#     trajectory_3d = np.array(list(zip(trajectory_2d_x, trajectory_2d_y, trajectory_3d_z)))
-#     cam1 = {
-#         'R': parameters.cam1_R,
-#         'T': parameters.cam1_T,
-#         'K': parameters.cam1_K,
-#         'dist': parameters.cam1_dist
-#     }
-#     cam2 = {
-#         'R': parameters.cam2_R,
-#         'T': parameters.cam2_T,
-#         'K': parameters.cam2_K,
-#         'dist': parameters.cam2_dist
-#     }
-#     # Проецирование 3D точек на плоскость изображений для камер cam1 и cam2
-#     projected_points_cam1, projected_points_cam2 = project_trajectory_3d(cam1, cam2, trajectory_3d)
-
-#     # Рассчитываем параметры параболы на изображении
-
-#     parabola_height, parabola_width, branches_height_ratio = calculate_parabola_parameters(projected_points_cam1)  
-#     H = parameters.image_height
-#     W = parameters.image_width
-
-#     THRESHOLD = 0.25
-
-#     not_valid_points_1 = len(projected_points_cam1[projected_points_cam1[:,0] < 0]) + \
-#                         len(projected_points_cam1[projected_points_cam1[:,0] > W]) + \
-#                         len(projected_points_cam1[projected_points_cam1[:,1] < 0]) + \
-#                         len(projected_points_cam1[projected_points_cam1[:,1] > H])
-                        
-#     not_valid_points_2 = len(projected_points_cam2[projected_points_cam2[:,0] < 0]) + \
-#                         len(projected_points_cam2[projected_points_cam2[:,0] > W]) + \
-#                         len(projected_points_cam2[projected_points_cam2[:,1] < 0]) + \
-#                         len(projected_points_cam2[projected_points_cam2[:,1] > H])
-    
-#     if not_valid_points_1 / len(projected_points_cam1) > THRESHOLD or not_valid_points_2 / len(projected_points_cam2) > THRESHOLD:
-#         return None, None, None, None, None, None, None, None
-    
-#     d = parameters.particle_diameter
-#     # Шаг интегрирования 
-#     delta_x = parameters.x_integration_step # mm
-#     delta_y = parameters.y_integration_step
-
-#     img1 = np.zeros((H, W), dtype=float)
-#     img2 = np.zeros((H, W), dtype=float)
-    
-#     img1_1 = add_intensity_subpixel(img1, d, projected_points_cam1[:,0], projected_points_cam1[:,1], delta_x, delta_y)
-#     img2_1 = add_intensity_subpixel(img2, d, projected_points_cam2[:,0], projected_points_cam2[:,1], delta_x, delta_y)
-    
-#     img1_1 = (img1_1 / np.max(img1_1) * 30).astype(np.uint8)
-#     img2_1 = (img2_1 / np.max(img2_1) * 30).astype(np.uint8)
-    
-#     return img1_1, img2_1, projected_points_cam1, projected_points_cam2, trajectory_3d, parabola_height, parabola_width, branches_height_ratio
-
-# if __name__ == "__main__":
-#     parameters = ModelingParabolaParameters()
-#     img1_1, img2_1, projected_points_cam1, projected_points_cam2, trajectory_3d, parabola_height, parabola_width, branches_height_ratio = get_simulated_image(parameters)
-  
-
-#     # Save the images and data
-#     if img1_1 is not None and img2_1 is not None:
-    #     np.savetxt('img1_1.csv', img1_1, delimiter=',', fmt='%d')
-    #     np.savetxt('img2_1.csv', img2_1, delimiter=',', fmt='%d')
-    #     np.savetxt('projected_points_cam1.csv', projected_points_cam1, delimiter=',')
-    #     np.savetxt('projected_points_cam2.csv', projected_points_cam2, delimiter=',')
-        
-    #     # Optional: save parabola parameters
-    #     np.save('parabola_parameters.npy', np.array([parabola_height, parabola_width, branches_height_ratio]))
-
-    #     print("Data saved successfully.")
-    # else:
-    #     print("Not enough valid points to generate images.")
-
-    # img1_1_loaded = np.loadtxt('img1_1.csv', delimiter=',')
-    # print("Loaded img1_1 data:\n", img1_1_loaded)
-    # print("Loaded img1_1 data range:", img1_1_loaded.min(), img1_1_loaded.max())
-
-#     # Display the loaded image
-#     plt.imshow(img1_1_loaded, cmap='gray')
-#     plt.title('Loaded Image from img1_1.csv')
-#     plt.colorbar()
-#     plt.show()
-
-
-
-
-
-
