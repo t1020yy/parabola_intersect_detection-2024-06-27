@@ -1,3 +1,4 @@
+import os
 from PIL import Image
 import cv2
 import numpy as np
@@ -210,90 +211,98 @@ def bfs_track(image, start_points, track_mask):
     return output_image
 
 
-IMAGE_FILE_NAME = "output/img3_combined_7.bmp"
-img_np = cv2.imread(IMAGE_FILE_NAME, cv2.IMREAD_GRAYSCALE)
-# img_np = process_and_convert_image(image_path)
+def process_image(image_path):
+    # Read image in grayscale
+    img_np = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    # Display the image
+    cv2.namedWindow('img', cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('img', 800, 600)
+    cv2.imshow('img', img_np)
+    cv2.waitKey()
+    # Apply threshold
+    ret, img_bw = cv2.threshold(img_np, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Display the binary image
+    cv2.imshow('img', img_bw)
+    cv2.waitKey()
 
-cv2.namedWindow('img', cv2.WINDOW_NORMAL)
-cv2.resizeWindow('img', 800, 600)
-cv2.imshow('img', img_np)
-cv2.waitKey()
+    # Apply Zhang-Suen thinning algorithm
+    img_bw_skeleton = zhang_suen_thinning_optimized((img_bw // 255))
+    # Display the thinned image
+    cv2.imshow('img', (img_bw_skeleton * 255).astype(np.uint8))
+    cv2.waitKey()
 
-# img_bw, img_bw_skeleton = apply_threshold_and_thinning(img_np)
+    # Find intersections
+    intersections_coords = find_intersections(img_bw_skeleton)
+    # Convert binary image to BGR for marking
+    color_img = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2BGR)
+    color_img[img_bw_skeleton == 1] = (255, 0, 0)
+    
+    for point in intersections_coords:
+        cv2.circle(color_img, (point[1], point[0]), 0, (0, 0, 255), -1)  # Red circle marking
+        print(f"Intersection at: ({point[1]}, {point[0]})")
 
-ret, img_bw = cv2.threshold(img_np, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Display the marked image
+    cv2.imshow('img', color_img[intersections_coords[0][0]-30:intersections_coords[0][0]+30,
+                                intersections_coords[0][1]-30:intersections_coords[0][1]+30,:])
+    cv2.imwrite(f'transitions_Marked/transitions_Marked_3_{os.path.basename(image_path)}', color_img)
+    cv2.waitKey()
 
-cv2.imshow('img', img_bw)
-cv2.waitKey()
+# List of image file paths
+image_files = ["output/final_img1_combined_0.bmp", "output/final_img1_combined_1.bmp", "output/final_img1_combined_2.bmp", "output/final_img1_combined_3.bmp", "output/final_img1_combined_4.bmp", "output/final_img1_combined_5.bmp", "output/final_img1_combined_6.bmp", "output/final_img1_combined_7.bmp", "output/final_img1_combined_8.bmp", "output/final_img1_combined_9.bmp"]
+image_files_1 = ["output_1/final_img1_combined_1.bmp", "output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp", "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_5.bmp", "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_7.bmp", "output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_9.bmp"]
+# Process each image
+for image_path in image_files_1:
+    process_image(image_path)
 
-# img_bw_skeleton = zhang_suen_thinning((img_bw // 255))
-img_bw_skeleton = zhang_suen_thinning_optimized((img_bw // 255))
+cv2.destroyAllWindows()
 
-cv2.imshow('img', (img_bw_skeleton * 255).astype(np.uint8))
-cv2.waitKey()
+
+# #第二种方法,通过计算过渡个数，找交点位置。
 
 # cv2.imwrite('thinning_result.bmp', (img_bw_skeleton * 255).astype(np.uint8))
-#第一种方法，老师计算的
-intersections_coords = find_intersections(img_bw_skeleton)
 
-color_img = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2BGR)
-color_img[img_bw_skeleton == 1] = (255, 0 , 0)
-for point in intersections_coords:
-    cv2.circle(color_img, (point[1], point[0]), 0, (0, 0, 255), -1)  # Red circle marking
-    print(f"Intersection1 at: ({point[1]}, {point[0]})")
+# img = cv2.imread('thinning_result.bmp', cv2.IMREAD_GRAYSCALE)
+# # 转换为二值图像，确保图像是0和255值
+# _, binary_img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
 
+# def transitions_count(window):
+#     "计算3x3窗口边界上的 (1,0,1) 过渡个数"
+#     boundary = np.concatenate([window[0, :], window[:, -1], window[-1, ::-1], window[::-1, 0]])
+#     # 将边界的值从255转换为1，0保持不变
+#     boundary = boundary // 255
+#     pattern = [1, 0, 1]
+#     count = 0
+#     for i in range(len(boundary) - len(pattern) + 1):
+#         if list(boundary[i:i+len(pattern)]) == pattern:
+#             count += 1
+#     return count
 
-cv2.imshow('img', color_img[intersections_coords[0][0]-30:intersections_coords[0][0]+30,
-                            intersections_coords[0][1]-30:intersections_coords[0][1]+30,:])
-cv2.imwrite('transitions_Marked_3_7_1.png', color_img)
-cv2.waitKey()
+# # 遍历图像，计算每个3x3窗口的过渡个数
+# rows, cols = binary_img.shape
+# result = np.zeros((rows - 2, cols - 2), dtype=int)
 
-#第二种方法,通过计算过渡个数，找交点位置。
+# for i in range(rows - 2):
+#     for j in range(cols - 2):
+#         window = binary_img[i:i + 3, j:j + 3]
+#         result[i, j] = transitions_count(window)
+# max_val = result.max()
+# max_positions = np.argwhere(result == max_val)
 
-cv2.imwrite('thinning_result.bmp', (img_bw_skeleton * 255).astype(np.uint8))
+# color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-img = cv2.imread('thinning_result.bmp', cv2.IMREAD_GRAYSCALE)
-# 转换为二值图像，确保图像是0和255值
-_, binary_img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-
-def transitions_count(window):
-    "计算3x3窗口边界上的 (1,0,1) 过渡个数"
-    boundary = np.concatenate([window[0, :], window[:, -1], window[-1, ::-1], window[::-1, 0]])
-    # 将边界的值从255转换为1，0保持不变
-    boundary = boundary // 255
-    pattern = [1, 0, 1]
-    count = 0
-    for i in range(len(boundary) - len(pattern) + 1):
-        if list(boundary[i:i+len(pattern)]) == pattern:
-            count += 1
-    return count
-
-# 遍历图像，计算每个3x3窗口的过渡个数
-rows, cols = binary_img.shape
-result = np.zeros((rows - 2, cols - 2), dtype=int)
-
-for i in range(rows - 2):
-    for j in range(cols - 2):
-        window = binary_img[i:i + 3, j:j + 3]
-        result[i, j] = transitions_count(window)
-max_val = result.max()
-max_positions = np.argwhere(result == max_val)
-
-color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-
-# 在原始图像中标记过渡次数最多的位置
-for pos in max_positions:
-    top_left_x, top_left_y = pos
-    center_x, center_y = top_left_x + 1, top_left_y + 1  # 调整为3x3窗口的中心位置
-    cv2.circle(color_img, (center_y, center_x), 1, (0, 0, 255), -1)  # 用红色圆圈标记
-    print(f"Intersection2 at: ({center_y}, {center_x})")
-# 保存和显示结果图像
-cv2.imwrite('transitions_Marked_3_7_2.png', color_img)
-cv2.imshow('Transition Count Max Marked', color_img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-# 输出或存储结果
-print(result)
+# # 在原始图像中标记过渡次数最多的位置
+# for pos in max_positions:
+#     top_left_x, top_left_y = pos
+#     center_x, center_y = top_left_x + 1, top_left_y + 1  # 调整为3x3窗口的中心位置
+#     cv2.circle(color_img, (center_y, center_x), 1, (0, 0, 255), -1)  # 用红色圆圈标记
+#     print(f"Intersection2 at: ({center_y}, {center_x})")
+# # 保存和显示结果图像
+# cv2.imwrite('transitions_Marked_3_7_2.png', color_img)
+# cv2.imshow('Transition Count Max Marked', color_img)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
+# # 输出或存储结果
+# print(result)
 
 
 
