@@ -155,61 +155,150 @@ def find_intersections(skeleton_image):
     parabolas_ends = skeleton_image_white_pixels_indices[
         np.nonzero(neighbors_hv + neighbors_diag < 2)]
 
-    return intersections_coords
+    return intersections_coords, parabolas_ends
 
-def apply_threshold_and_thinning(image_np):
-    Otsu_Threshold = threshold_otsu(image_np)    
-    BW_Original = image_np < Otsu_Threshold        
-    BW_Skeleton = zhang_suen_thinning_optimized(BW_Original)
-    return BW_Original, BW_Skeleton
-
-def is_intersection(x, y, image):
-    """检查一个像素点是否是交点，中心为黑色且周围全为白色像素"""
-    if image[x, y] != 0:  # 确保中心像素是黑色
-        return False
-    # 获取周围的8个邻居像素
-    neighbors = image[x-1:x+2, y-1:y+2]
-    # 检查除了中心点之外所有邻居是否都是白色
-    neighbors_flattened = neighbors.flatten()
-    # 排除中心点，检查其余像素
-    return np.all(neighbors_flattened[np.arange(neighbors_flattened.size) != 4] == 255)
-
-def find_and_mark_intersections(BW_Skeleton):
-    # binary_img = (BW_Skeleton * 255).astype(np.uint8)
-    if BW_Skeleton.dtype != np.uint8:
-        BW_Skeleton = (BW_Skeleton * 255).astype(np.uint8)
-    _, binary_img = cv2.threshold(BW_Skeleton, 127, 255, cv2.THRESH_BINARY)
-    intersections = []
-
-    for x in range(1, binary_img.shape[0] - 1):
-        for y in range(1, binary_img.shape[1] - 1):
-            if is_intersection(x, y, binary_img):
-                intersections.append((x, y))
-
-    color_img = cv2.cvtColor(binary_img, cv2.COLOR_GRAY2BGR)
-    for point in intersections:
-        cv2.circle(color_img, (point[1], point[0]), 1, (0, 0, 255), -1)  # Red circle marking
-        print(intersections[0])
+# def trackParabola(end_point, img):
+#     c_x, c_y = end_point[0], end_point[1]
     
-    return color_img, intersections
+#     parabalas_points = []
+#     parabola_directions = []
+#     track_directions = ((0, -1), (1, 0), (-1, 0), (0, 1), (1, -1), (1, 1), (-1, 1), (-1, -1))
+#     track_directions_in_deg = np.rad2deg(np.arctan2(np.array(track_directions)[:,0],np.array(track_directions)[:,1]))
 
-def bfs_track(image, start_points, track_mask):
-    queue = deque(start_points)
-    output_image = np.zeros_like(image, dtype=np.uint8)
-    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-    
-    while queue:
-        x, y = queue.popleft()
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < image.shape[0] and 0 <= ny < image.shape[1]:
-                if image[nx, ny] == 255 and track_mask[nx, ny]:
-                    output_image[nx, ny] = 255
-                    image[nx, ny] = 0  # Mark this pixel as visited by setting it to black
-                    queue.append((nx, ny))
-    
-    return output_image
+#     while len(parabalas_points) == 0 or point_founded:
+#         parabalas_points.append((c_x, c_y))
+#         point_founded = False
+       
+#         for direction, direction_in_deg in zip(track_directions, track_directions_in_deg):
+#             t_x = c_x + direction[0]
+#             t_y = c_y + direction[1]
+#             if img[t_x, t_y] == 1 and (t_x, t_y) not in parabalas_points:
+#                 if len(parabola_directions) > 10:
+#                     dir = np.mean(np.array(parabola_directions[-10:]), axis=0)
+#                     dir_in_deg = np.rad2deg(np.arctan2(dir[0], dir[1]))
+#                     if abs(dir_in_deg - direction_in_deg) > 45:
+#                         print(f'{dir_in_deg} - {direction_in_deg}')
+                    
+#                 parabola_directions.append((t_x-c_x, t_y-c_y))
+#                 c_x = t_x
+#                 c_y = t_y
+#                 point_founded = True
+#                 break
 
+#     return parabalas_points
+
+
+def points_are_close(point1, point2, tolerance=1e-5):
+    """
+    判断两个点是否接近，允许一定的容差。
+    支持 NumPy 数组和 Python 元组的比较。
+    """
+    if isinstance(point1, np.ndarray) and isinstance(point2, np.ndarray):
+        return np.all(np.abs(point1 - point2) < tolerance)
+    else:
+        return abs(point1[0] - point2[0]) < tolerance and abs(point1[1] - point2[1]) < tolerance
+
+def trackParabola_until_intersection(end_point, img, choose_coords):
+    c_x, c_y = end_point[0], end_point[1]
+    
+    print(f"choose_coords",choose_coords)
+    parabalas_points = []
+    parabola_directions = []
+    track_directions = ((0, -1), (1, 0), (-1, 0), (0, 1), (1, -1), (1, 1), (-1, 1), (-1, -1))
+    track_directions_in_deg = np.rad2deg(np.arctan2(np.array(track_directions)[:,0], np.array(track_directions)[:,1]))
+
+    while len(parabalas_points) == 0 or point_founded:
+        parabalas_points.append((c_x, c_y))
+        point_founded = False
+        
+        # 检查是否到达交叉点
+        if points_are_close(np.array([c_x, c_y]), np.array(choose_coords)):
+            print(f"Reached intersection at: ({c_x}, {c_y})")
+            break
+        last_point = (c_x, c_y)
+        for direction, direction_in_deg in zip(track_directions, track_directions_in_deg):
+            t_x = c_x + direction[0]
+            t_y = c_y + direction[1]
+            if img[t_x, t_y] == 1 and (t_x, t_y) not in parabalas_points:
+                parabola_directions.append((t_x-c_x, t_y-c_y))
+                c_x = t_x
+                c_y = t_y
+                point_founded = True
+                break
+
+        if not point_founded:
+            break  # 没有找到符合条件的下一个点，退出
+
+    return parabalas_points, last_point
+
+def find_complete_parabolas(choose_coords, parabolas_ends, img):
+    all_parabolas = []
+    all_last_point = []
+    for end in parabolas_ends:
+        print(f"parabolas_ends1",end)
+        # 从每个端点追踪到交点
+        parabola_part, last_point = trackParabola_until_intersection(end, img, [choose_coords])
+        all_parabolas.append(parabola_part)
+        all_last_point.append(last_point)
+
+    return all_parabolas, all_last_point
+
+def calculate_direction(point1, point2):
+    """
+    计算从 point1 到 point2 的方向角度（以度为单位）。
+    """
+    delta_x = point2[0] - point1[0]
+    delta_y = point2[1] - point1[1]
+    angle = np.rad2deg(np.arctan2(delta_y, delta_x))  # 计算方向角度
+    print(f"Point1: {point1}, Point2: {point2}, Angle: {angle}")
+    return angle
+
+def are_same_parabola(direction1, direction2):
+    """
+    判断两个方向是否相反，且方向角度之和接近 180 度。
+    """
+    angle_diff = abs(direction1 - direction2) % 360  # 计算角度差
+    print(f"Comparing directions: {direction1} vs {direction2}, angle_diff = {angle_diff}")
+    if abs(angle_diff - 180) < 10:  # 判断方向角度和是否接近 180 度（容差10度）
+        return True
+    return False
+
+def match_parabola_parts(complete_parabolas, intersection, all_last_point):
+    """
+    匹配抛物线的四个部分，判断哪些片段属于同一条抛物线。
+    :param complete_parabolas: 抛物线的四个片段
+    :param intersection: 交点坐标
+    :return: 两对片段，分别属于两条抛物线
+    """
+    matched_pairs = []
+    used_indices = set()  # 用于记录已经匹配的片段索引
+    
+    for i in range(len(complete_parabolas)):
+        if i in used_indices:
+            continue  # 如果片段已经匹配过，跳过
+        for j in range(i + 1, len(complete_parabolas)):
+            if j in used_indices:
+                continue  # 如果片段已经匹配过，跳过
+            
+            part1 = all_last_point[i]
+            part2 = all_last_point[j]
+            
+            # 分别计算两个片段在交点处的方向角度
+            direction1 = calculate_direction(intersection, part1)  # part1 从交点开始的方向
+            direction2 = calculate_direction(intersection, part2)  # part2 从交点开始的方向
+
+            # 判断方向是否相反
+            if are_same_parabola(direction1, direction2):
+                matched_pairs.append((complete_parabolas[i], complete_parabolas[j]))  # 匹配到同一条抛物线的两个片段
+                used_indices.update([i, j])  # 标记这些片段已匹配
+                break  # 退出内层循环
+            else:
+                print(f"片段{i} 和 片段{j} 方向角度差不符合180度,跳过")
+
+    if len(matched_pairs) * 2 < len(complete_parabolas):
+        print("存在未匹配的片段")
+    
+    return matched_pairs
 
 def process_image(image_path):
     # Read image in grayscale
@@ -232,24 +321,69 @@ def process_image(image_path):
     cv2.waitKey()
 
     # Find intersections
-    intersections_coords = find_intersections(img_bw_skeleton)
+    intersections_coords, parabolas_ends = find_intersections(img_bw_skeleton)
     # Convert binary image to BGR for marking
     color_img = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2BGR)
     color_img[img_bw_skeleton == 1] = (255, 0, 0)
-    
+
+    # first_parabola = trackParabola(parabolas_ends[0], img_bw_skeleton)
+    # 找到并组合两条完整的抛物线
+
+    for idx, point in enumerate(parabolas_ends):
+        cv2.circle(color_img, (point[1], point[0]), 5, (0, 0, 255), -1)  # 用红色圆圈标记端点
+        # 在端点旁边标注数字
+        cv2.putText(color_img, str(idx + 1), (point[1] + 10, point[0] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+        print(f"端点 {idx + 1} 标记在: ({point[1]}, {point[0]})")
+
+    choose_coords = intersections_coords[1]
+    complete_parabolas, all_last_point = find_complete_parabolas(choose_coords, parabolas_ends, img_bw_skeleton)
+    print("all_last_point", all_last_point)
+    colors = [(0, 255, 0), (255, 255, 0), (255, 0, 255), (255, 165, 0)]  # 绿色、黄色、紫色、青色
+    for idx, parabola in enumerate(complete_parabolas):
+        color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
+        for point in parabola:
+            cv2.circle(color_img, (point[1], point[0]), 1, color, -1)  # 使用不同的颜色标记每个片段
+              
     for point in intersections_coords:
         cv2.circle(color_img, (point[1], point[0]), 0, (0, 0, 255), -1)  # Red circle marking
         print(f"Intersection at: ({point[1]}, {point[0]})")
 
-    # Display the marked image
-    cv2.imshow('img', color_img[intersections_coords[0][0]-30:intersections_coords[0][0]+30,
-                                intersections_coords[0][1]-30:intersections_coords[0][1]+30,:])
+    cv2.imshow('img', color_img)
     cv2.imwrite(f'transitions_Marked/transitions_Marked_3_{os.path.basename(image_path)}', color_img)
     cv2.waitKey()
 
+    matched = match_parabola_parts(complete_parabolas, choose_coords, all_last_point)
+    colors = [(255, 0, 0), (0, 0, 0)]  
+    for idx, pair in enumerate(matched):
+        color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
+        for part in pair:
+            for point in part:
+                cv2.circle(color_img, (point[1], point[0]), 1, color, -1)  # 使用不同的颜色标记每个片段
+        print(f"抛物线 {idx + 1} 已用颜色 {color} 标记。")
+    
+    cv2.imshow('matched parabola', color_img)
+    cv2.imwrite(f'transitions_Marked/transitions_Marked_4_{os.path.basename(image_path)}', color_img)
+    cv2.waitKey()
+
+    # for point in first_parabola:
+    #     cv2.circle(color_img, (point[1], point[0]), 0, (0, 255, 0), -1)  # Green circle marking
+    #     #print(f"End point at: ({point[1]}, {point[0]})")
+
+    # 绘制两条完整的抛物线
+    # for parabola in complete_parabolas:
+    #     for point in parabola:
+    #         cv2.circle(color_img, (point[1], point[0]), 0, (0, 255, 0), -1)  # 绿色标记完整抛物线
+    #         #print(f"Point at: ({point[1]}, {point[0]})")
+
+
+    # Display the marked image
+    # cv2.imshow('img', color_img)
+    # cv2.imwrite(f'transitions_Marked/transitions_Marked_3_{os.path.basename(image_path)}', color_img)
+    # cv2.waitKey()
+
 # List of image file paths
 image_files = ["output/final_img1_combined_0.bmp", "output/final_img1_combined_1.bmp", "output/final_img1_combined_2.bmp", "output/final_img1_combined_3.bmp", "output/final_img1_combined_4.bmp", "output/final_img1_combined_5.bmp", "output/final_img1_combined_6.bmp", "output/final_img1_combined_7.bmp", "output/final_img1_combined_8.bmp", "output/final_img1_combined_9.bmp"]
-image_files_1 = ["output_1/final_img1_combined_1.bmp", "output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp", "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_5.bmp", "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_7.bmp", "output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_9.bmp"]
+image_files_1 = ["output_1/final_img1_combined_1.bmp","output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp", "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_7.bmp", "output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_9.bmp"]
 # Process each image
 for image_path in image_files_1:
     process_image(image_path)
