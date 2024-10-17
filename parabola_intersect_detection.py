@@ -431,35 +431,84 @@ def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersect
     # 1. 初始化有向图
     G = nx.DiGraph()
 
+    # points = intersections + parabolas_ends
+    points = intersections + parabolas_ends
+    checked_edges = {}  # 用于存储已经检测过的indices组合
     # 2. 构建图的节点，每个片段作为一个节点
-    for i in range(len(complete_parabolas)):
-        G.add_node(i, parabola=complete_parabolas[i], direction=all_parabolas_directions[i])
+    for i in range(len(points)):
+        G.add_node(i, coord=points[i], end_point=i>=len(intersections))
     
     # 3. 构建图的边
     # 如果两个片段的末点和起点在交点处匹配，且方向一致，则在图中添加边
     for i in range(len(complete_parabolas)):
-        end_i = parabolas_ends[i % len(parabolas_ends)]  # 从parabolas_ends获取末端点
-        dir_i = all_parabolas_directions[i][-1]  # i片段的末端方向
-        
-        for j in range(len(complete_parabolas)):
-            if i != j:
-                dir_j = all_parabolas_directions[j][0]  # j片段的起点方向
-                intersection_j = intersections[j % len(intersections)]  # 从intersections获取交点
-                
-                # 检查末端点和交点是否接近
-                if np.linalg.norm(np.array(end_i) - np.array(intersection_j)) < threshold:
-                    # 检查方向是否一致
-                    angle_diff = np.dot(dir_i, dir_j) / (np.linalg.norm(dir_i) * np.linalg.norm(dir_j))
-                    if angle_diff > 0.95:  # 角度一致性阈值
-                        G.add_edge(i, j)
+        indices = [k for k, point in enumerate(points) if (complete_parabolas[i]==point).all(axis=1).any()]
+        # G.add_edge(indices[0], indices[1], parabola_part=complete_parabolas[i])
 
-    # 4. 匹配抛物线片段，寻找完整路径
-    # 在图中找到所有连通的子图，每个连通子图代表一个完整的抛物线
-    complete_paths = []
-    for subgraph in nx.weakly_connected_components(G):  # 寻找弱连通分量
-        complete_paths.append(list(subgraph))
+        # 我们的目标是为每个indices对都正确添加边
+        node_pair = tuple(sorted(indices))  # 对节点对进行排序以避免顺序不同的重复
+        # 检查该node_pair是否已存在
+        if node_pair not in checked_edges:
+            checked_edges[node_pair] = [complete_parabolas[i]]  # 记录首次发现的边
+            G.add_edge(indices[1], indices[0], key=i, parabola_part=complete_parabolas[i])  # 添加一条边
+        else:
+            # 如果这个node_pair已经存在但对应的parabola不同，则添加一条新边
+            if not any(np.array_equal(complete_parabolas[i], cp) for cp in checked_edges[node_pair]):
+                checked_edges[node_pair].append(complete_parabolas[i])
+                G.add_edge(indices[0], indices[1], key=i, parabola_part=complete_parabolas[i])  # 添加另一条边
+     
+
+    complete_paths = [] 
+
+    colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
+    pos = nx.spring_layout(G)
+    nx.draw_networkx(G, pos)
+    plt.show()
+
+    colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
+    coord_to_node_id = {node_data['coord'].tobytes(): node_id for node_id, node_data in G.nodes(data=True)}
+    all_paths = []
+    current_edges_in_path  = []
+    pos = nx.spring_layout(G)  
+    for idx, start_node in enumerate(parabolas_ends): 
+        current_node = start_node
+        color = colors[idx % len(colors)]  # 为当前路径选择颜色
+        current_edges_in_path = []  # 存储当前路径的边
+        while True:
+            start_node_bytes = np.array(current_node).tobytes()
+            if start_node_bytes in coord_to_node_id:
+                node_id = coord_to_node_id[start_node_bytes]
+        # 获取当前节点的出边和入边
+                out_edges = list(G.out_edges(node_id))  # 获取出边
+                in_edges = list(G.in_edges(node_id)) 
+                
+                if len(out_edges + in_edges) == 1:  # 如果只有一个后继节点，继续追踪
+                    _, next_node= out_edges[0]
+                    next_node_coord = G.nodes[next_node]['coord']
+                    current_edges_in_path.append(out_edges[0]) 
+                    current_node = next_node_coord
+                elif len(out_edges + in_edges) > 1 and len(out_edges) == 1:
+                    _, next_node= out_edges[0]
+                    next_node_coord = G.nodes[next_node]['coord']
+                    current_edges_in_path.append(out_edges[0]) 
+                    current_node = next_node_coord
+
+                    break
+                
+            else:
+                break  # 如果找不到对应的节点 ID，则停止追踪
+            all_paths.append(current_edges_in_path)
+    # 分配不同颜色给每条路径
+    for idx, path_edges in enumerate(all_paths):
+        color = colors[idx % len(colors)]  # 分配不同颜色
+        for edge in path_edges:
+            nx.draw_networkx_edges(G, pos, edgelist=[edge], edge_color=color, width=5)  
+
+    nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=500)
+    nx.draw_networkx_edges(G, pos)
+    nx.draw_networkx_labels(G, pos)
+
+    plt.show()
     
-    # 5. 返回匹配到的两条完整的抛物线片段
     return complete_paths
 
 
@@ -637,7 +686,7 @@ def process_image(image_path):
 
 # List of image file paths
 image_files = ["output/final_img1_combined_0.bmp", "output/final_img1_combined_1.bmp", "output/final_img1_combined_2.bmp", "output/final_img1_combined_3.bmp", "output/final_img1_combined_4.bmp", "output/final_img1_combined_5.bmp", "output/final_img1_combined_6.bmp", "output/final_img1_combined_7.bmp", "output/final_img1_combined_8.bmp", "output/final_img1_combined_9.bmp"]
-image_files_1 = ["output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_7.bmp", "output_1/final_img1_combined_1.bmp","output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp", "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_9.bmp"]
+image_files_1 = ["output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_7.bmp","output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp", "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_9.bmp",  "output_1/final_img1_combined_1.bmp",]
 # Process each image
 for image_path in image_files_1:
     process_image(image_path)
