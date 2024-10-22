@@ -6,6 +6,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
+
 def process_and_convert_image(image_path):
     img = Image.open(image_path)
     writable_img = img.copy()
@@ -374,16 +375,14 @@ def find_complete_parabolas(intersections_coords, parabolas_ends, img):
     # 处理末点到交点
     for intersection in intersections_coords:
         print(f"追踪末点到交点：{intersection}")
-        
+
         point_founded = True
-        
         while point_founded:
-            parabola_part, parabola_directions, point_founded = track_parabola_until_target(intersection, img, parabolas_ends_and_intersections, points_used)
+            parabola_part, parabola_directions, point_founded = track_parabola_until_target(intersection, img, parabolas_ends_and_intersections, points_used) 
             if not point_founded:
                 break
             all_parabolas.append(parabola_part)
             all_parabolas_directions.append(parabola_directions)
-
     return all_parabolas, all_parabolas_directions
 
 
@@ -425,158 +424,310 @@ def distance_condition(parabola1, parabola2, max_distance):
 
     return dist1 < max_distance and dist2 < max_distance
 
+def check_parabolas_endpoints(complete_parabolas):
+    """打印所有抛物线片段的起点和终点的坐标"""
+    for i, parabola in enumerate(complete_parabolas):
+        parabola = np.array(parabola)  # 确保转换为 numpy 数组
+        start_point = parabola[0]  # 片段的起点
+        end_point = parabola[-1]   # 片段的终点
+        distance = np.linalg.norm(end_point - start_point)
+        print(f"Parabola {i}: Start Point = {start_point}, End Point = {end_point}, Distance = {distance}")
+   
+#def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends, threshold=1e-2):
+#      NetworkX
+#     Проверяем на вхождение точки в часть параболы
+#     [(par==intersections[1]).all(axis=1).any() for par in complete_parabolas]
+#     Берем первую конечную точку, находим часть параболы в которую она входит, создаем вершину и одно ребро
+#     Смотрим чем кончается найденная часть параболы - точкой пересечения, добавляем вершину
+#     От точки пересечения смотрим какие части параболы к ней относятся, и добавляем ребра
 
 
-def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends, threshold=1e-2):
-    # 1. 初始化有向图
-    G = nx.DiGraph()
+# 1. 初始化有向图
+    # G = nx.DiGraph()
 
+    # # points = intersections + parabolas_ends
     # points = intersections + parabolas_ends
-    points = intersections + parabolas_ends
-    checked_edges = {}  # 用于存储已经检测过的indices组合
-    # 2. 构建图的节点，每个片段作为一个节点
-    for i in range(len(points)):
-        G.add_node(i, coord=points[i], end_point=i>=len(intersections))
+    # checked_edges = {}  # 用于存储已经检测过的indices组合
+    # # 2. 构建图的节点，每个片段作为一个节点
+    # for i in range(len(points)):
+    #     G.add_node(i, coord=points[i], end_point=i>=len(intersections))
     
-    # 3. 构建图的边
-    # 如果两个片段的末点和起点在交点处匹配，且方向一致，则在图中添加边
-    for i in range(len(complete_parabolas)):
-        indices = [k for k, point in enumerate(points) if (complete_parabolas[i]==point).all(axis=1).any()]
-        # G.add_edge(indices[0], indices[1], parabola_part=complete_parabolas[i])
+    # # 3. 构建图的边
+    # # 如果两个片段的末点和起点在交点处匹配，且方向一致，则在图中添加边
+    # for i in range(len(complete_parabolas)):
+    #     indices = [k for k, point in enumerate(points) if (complete_parabolas[i]==point).all(axis=1).any()]
+    #     # G.add_edge(indices[0], indices[1], parabola_part=complete_parabolas[i])
 
-        # 我们的目标是为每个indices对都正确添加边
-        node_pair = tuple(sorted(indices))  # 对节点对进行排序以避免顺序不同的重复
-        # 检查该node_pair是否已存在
-        if node_pair not in checked_edges:
-            checked_edges[node_pair] = [complete_parabolas[i]]  # 记录首次发现的边
-            G.add_edge(indices[1], indices[0], key=i, parabola_part=complete_parabolas[i])  # 添加一条边
-        else:
-            # 如果这个node_pair已经存在但对应的parabola不同，则添加一条新边
-            if not any(np.array_equal(complete_parabolas[i], cp) for cp in checked_edges[node_pair]):
-                checked_edges[node_pair].append(complete_parabolas[i])
-                G.add_edge(indices[0], indices[1], key=i, parabola_part=complete_parabolas[i])  # 添加另一条边
+    #     # 我们的目标是为每个indices对都正确添加边
+    #     node_pair = tuple(sorted(indices))  # 对节点对进行排序以避免顺序不同的重复
+    #     # 检查该node_pair是否已存在
+    #     if node_pair not in checked_edges:
+    #         checked_edges[node_pair] = [complete_parabolas[i]]  # 记录首次发现的边
+    #         G.add_edge(indices[1], indices[0], key=i, parabola_part=complete_parabolas[i])  # 添加一条边
+    #     else:
+    #         # 如果这个node_pair已经存在但对应的parabola不同，则添加一条新边
+    #         if not any(np.array_equal(complete_parabolas[i], cp) for cp in checked_edges[node_pair]):
+    #             checked_edges[node_pair].append(complete_parabolas[i])
+    #             G.add_edge(indices[0], indices[1], key=i, parabola_part=complete_parabolas[i])  # 添加另一条边
      
 
-    complete_paths = [] 
+    # complete_paths = [] 
 
-    colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
-    pos = nx.spring_layout(G)
-    nx.draw_networkx(G, pos)
-    plt.show()
+    # colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
+    # pos = nx.spring_layout(G)
+    # nx.draw_networkx(G, pos)
+    # plt.show()
 
-    colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
-    coord_to_node_id = {node_data['coord'].tobytes(): node_id for node_id, node_data in G.nodes(data=True)}
-    all_paths = []
-    current_edges_in_path  = []
-    pos = nx.spring_layout(G)  
-    for idx, start_node in enumerate(parabolas_ends): 
-        current_node = start_node
-        color = colors[idx % len(colors)]  # 为当前路径选择颜色
-        current_edges_in_path = []  # 存储当前路径的边
-        while True:
-            start_node_bytes = np.array(current_node).tobytes()
-            if start_node_bytes in coord_to_node_id:
-                node_id = coord_to_node_id[start_node_bytes]
-        # 获取当前节点的出边和入边
-                out_edges = list(G.out_edges(node_id))  # 获取出边
-                in_edges = list(G.in_edges(node_id)) 
+    # colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'cyan', 'magenta']
+    # coord_to_node_id = {node_data['coord'].tobytes(): node_id for node_id, node_data in G.nodes(data=True)}
+    # all_paths = []
+    # current_edges_in_path  = []
+    # pos = nx.spring_layout(G)  
+    # for idx, start_node in enumerate(parabolas_ends): 
+    #     current_node = start_node
+    #     color = colors[idx % len(colors)]  # 为当前路径选择颜色
+    #     current_edges_in_path = []  # 存储当前路径的边
+    #     while True:
+    #         start_node_bytes = np.array(current_node).tobytes()
+    #         if start_node_bytes in coord_to_node_id:
+    #             node_id = coord_to_node_id[start_node_bytes]
+    #     # 获取当前节点的出边和入边
+    #             out_edges = list(G.out_edges(node_id))  # 获取出边
+    #             in_edges = list(G.in_edges(node_id)) 
                 
-                if len(out_edges + in_edges) == 1:  # 如果只有一个后继节点，继续追踪
-                    _, next_node= out_edges[0]
-                    next_node_coord = G.nodes[next_node]['coord']
-                    current_edges_in_path.append(out_edges[0]) 
-                    current_node = next_node_coord
-                elif len(out_edges + in_edges) > 1 and len(out_edges) == 1:
-                    _, next_node= out_edges[0]
-                    next_node_coord = G.nodes[next_node]['coord']
-                    current_edges_in_path.append(out_edges[0]) 
-                    current_node = next_node_coord
+    #             if len(out_edges + in_edges) == 1:  # 如果只有一个后继节点，继续追踪
+    #                 _, next_node= out_edges[0]
+    #                 next_node_coord = G.nodes[next_node]['coord']
+    #                 current_edges_in_path.append(out_edges[0]) 
+    #                 current_node = next_node_coord
+    #             elif len(out_edges + in_edges) > 1 and len(out_edges) == 1:
+    #                 _, next_node= out_edges[0]
+    #                 next_node_coord = G.nodes[next_node]['coord']
+    #                 current_edges_in_path.append(out_edges[0]) 
+    #                 current_node = next_node_coord
 
-                    break
+    #                 break
                 
-            else:
-                break  # 如果找不到对应的节点 ID，则停止追踪
-            all_paths.append(current_edges_in_path)
-    # 分配不同颜色给每条路径
-    for idx, path_edges in enumerate(all_paths):
-        color = colors[idx % len(colors)]  # 分配不同颜色
-        for edge in path_edges:
-            nx.draw_networkx_edges(G, pos, edgelist=[edge], edge_color=color, width=5)  
+    #         else:
+    #             break  # 如果找不到对应的节点 ID，则停止追踪
+    #         all_paths.append(current_edges_in_path)
+    # # 分配不同颜色给每条路径
+    # for idx, path_edges in enumerate(all_paths):
+    #     color = colors[idx % len(colors)]  # 分配不同颜色
+    #     for edge in path_edges:
+    #         nx.draw_networkx_edges(G, pos, edgelist=[edge], edge_color=color, width=5)  
 
-    nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=500)
-    nx.draw_networkx_edges(G, pos)
-    nx.draw_networkx_labels(G, pos)
+    # nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=500)
+    # nx.draw_networkx_edges(G, pos)
+    # nx.draw_networkx_labels(G, pos)
 
-    plt.show()
+    # plt.show()
     
-    return complete_paths
+    # return complete_paths
 
+def find_best_parabola(next_start_point, candidate_parabolas, previous_residuals, current_parabola):
+    """找到与 current_tracking_point 相连的最佳片段，基于残差差异选择."""
+    min_residual_difference = 2
+    best_parabola = None
+    best_residuals = None
+    for candidate in candidate_parabolas:
+        if np.all(np.isclose(candidate[-1], next_start_point)):
+            candidate_residuals, _ =calculate_partial_residuals(current_parabola)
+        else:
+            _, candidate_residuals =calculate_partial_residuals(current_parabola)
+        # x_vals_candidate = candidate[:, 0]
+        # y_vals_candidate = candidate[:, 1]
+        # candidate_coef, candidate_residuals, _, _, _ = np.polyfit(x_vals_candidate, y_vals_candidate, 2, full=True)
 
+        # 计算候选片段的残差与前一个片段的差异
+        residuals_difference = abs(candidate_residuals - previous_residuals)
+        # print(residuals_difference)
+        # 选择残差差异最小且不是当前片段的候选片段
+        if residuals_difference < min_residual_difference and not np.array_equal(candidate, current_parabola):
+            best_parabola = candidate
+            best_residuals = candidate_residuals
+    
+    return best_parabola, best_residuals
 
-#匹配片段，对于两条抛物线相交有一个交点的情况，不适应于三个或以上的抛物线
+def find_matching_parabolas(start_point, parabolas):
+    matching_parabolas = []
+    for parabola in parabolas:
+        # 将 parabola 转换为 numpy 数组，确保数据类型正确
+        parabola = np.array(parabola)
+        
+        if np.array_equal(parabola[0], start_point) or np.array_equal(parabola[-1], start_point):
+            matching_parabolas.append(parabola)
+           
+    return matching_parabolas
+
+def calculate_partial_residuals(parabola, n_points = 50):
+    """
+    计算给定抛物线片段的前 n_points 个点和后 n_points 个点的残差
+    """
+    # 确保片段转换为 NumPy 数组
+    parabola = np.array(parabola)
+    
+    # 前 n_points 个点
+    if len(parabola) < n_points:
+        x_vals, y_vals = parabola[:, 0], parabola[:, 1]
+        coef, residuals, _, _, _ = np.polyfit(x_vals, y_vals, 2, full=True)
+        return residuals[0] if len(residuals) > 0 else 0, residuals[0] if len(residuals) > 0 else 0
+
+    front_points = parabola[:n_points]
+    back_points = parabola[-n_points:]
+    
+    # 分别提取 x 和 y 值
+    x_vals_front, y_vals_front = front_points[:, 0], front_points[:, 1]
+    x_vals_back, y_vals_back = back_points[:, 0], back_points[:, 1]
+
+    # 对前 n_points 进行拟合并计算残差
+    coef_front, residuals_front, _, _, _ = np.polyfit(x_vals_front, y_vals_front, 2, full=True)
+
+    # 对后 n_points 进行拟合并计算残差
+    coef_back, residuals_back, _, _, _ = np.polyfit(x_vals_back, y_vals_back, 2, full=True)
+
+    # 返回前后两个部分的残差
+    return residuals_front[0] if len(residuals_front) > 0 else 0, residuals_back[0] if len(residuals_back) > 0 else 0
+        
+
+def trace_parabolas(start_point, complete_parabolas):
+    connected_parabolas = []  # 每次追踪到的片段
+    current_parabola = None
+    previous_residuals = 0
+    processed_points = set() 
+
+    for parabola in complete_parabolas:
+        if np.isclose(parabola[0], start_point).all() or np.isclose(parabola[-1], start_point).all():
+            current_parabola = parabola
+            connected_parabolas.append(current_parabola)  # 添加第一个片段
+            break
+        
+    if current_parabola is None:
+        return connected_parabolas  # 如果没有匹配的片段，返回
+        
+    # 将当前点标记为已处理
+    processed_points.add(tuple(start_point))
+
+    current_parabola = np.array(current_parabola)
+
+    # x_vals = current_parabola[:, 0]
+    # y_vals = current_parabola[:, 1]
+    # coef, residuals, _, _, _ = np.polyfit(x_vals, y_vals, 2, full=True)
+    # 检查 current_tracking_point 是否是 current_parabola 的起始点还是终止点
+
+    if np.all(np.isclose(current_parabola[-1], start_point)):
+        residuals, _ =calculate_partial_residuals(current_parabola)
+        next_start_point = current_parabola[0]
+    else:
+        _, residuals =calculate_partial_residuals(current_parabola)
+        next_start_point = current_parabola[-1]
+    previous_residuals = residuals
+
+    while next_start_point is not None:
+
+        processed_points.add(tuple(next_start_point))
+        # 检查 point 是否已经处理过
+        if tuple() in processed_points:
+            print(f"Already processed point: {next_start_point}, stopping to avoid loop.")
+            break  # 如果该点已经处理过，则终止追踪
+
+        # 找到与下一个起点相连的片段
+        candidate_parabolas = find_matching_parabolas(next_start_point, complete_parabolas)
+
+        # 如果没有候选片段，终止追踪
+        if not candidate_parabolas:
+            break
+            
+        best_parabola, best_residuals = find_best_parabola(next_start_point, candidate_parabolas, previous_residuals, current_parabola)
+        if best_parabola is None:
+            break
+            
+        connected_parabolas.append(best_parabola)
+        current_parabola = best_parabola
+
+        # 更新 next_start_point 为新片段的另一端，继续追踪
+        if np.all(np.isclose(current_parabola[-1], next_start_point)):
+            next_start_point = current_parabola[0]
+        else:
+            next_start_point = current_parabola[-1]   
+        previous_residuals = best_residuals
+
+    return connected_parabolas   
+
+def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends):
+    """匹配抛物线片段，并根据拟合的系数和残差找到相同抛物线的段。"""
+
+    matched_pairs = []  # 用于保存所有起始点追踪到的片段链
+    processed_points = set()
+
+    for end_point in parabolas_ends:
+        # 跳过已处理的 end_point
+        if tuple(end_point) in processed_points:
+            continue
+        connected_parabolas = trace_parabolas(end_point, complete_parabolas)
+
+        if connected_parabolas:
+            matched_pairs.append(connected_parabolas)
+
+    return matched_pairs
+
+#对于两条抛物线相交有一个交点的情况，不适应于三个或以上的抛物线
 # def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends):
-#     """
-#     匹配抛物线的四个部分，判断哪些片段属于同一条抛物线。
-#     :param complete_parabolas: 抛物线的四个片段
-#     :param all_parabolas_directions: directions of parabolas
-#     :param intersection: 交点坐标
-#     :return: 两对片段，分别属于两条抛物线
-#     """
+    """
+    匹配抛物线的四个部分，判断哪些片段属于同一条抛物线。
+    :param complete_parabolas: 抛物线的四个片段
+    :param all_parabolas_directions: directions of parabolas
+    :param intersection: 交点坐标
+    :return: 两对片段，分别属于两条抛物线
+    """
 
-    # NetworkX
-    # Проверяем на вхождение точки в часть параболы
-    # [(par==intersections[1]).all(axis=1).any() for par in complete_parabolas]
-    # Берем первую конечную точку, находим часть параболы в которую она входит, создаем вершину и одно ребро
-    # Смотрим чем кончается найденная часть параболы - точкой пересечения, добавляем вершину
-    # От точки пересечения смотрим какие части параболы к ней относятся, и добавляем ребра
+    matched_pairs = []
+    used_indices = set()  # 用于记录已经匹配的片段索引
 
-#     matched_pairs = []
-#     used_indices = set()  # 用于记录已经匹配的片段索引
+    angles_end = []
+    angles_start = []
 
-#     angles_end = []
-#     angles_start = []
-
-#     for i in range(len(complete_parabolas)):
-#         averaging_length = min(len(complete_parabolas[i]), 5)
-#         angles_end.append(np.rad2deg(np.arctan2(*np.mean(np.array(all_parabolas_directions[i])[-averaging_length:], axis=0))))
-#         angles_start.append(np.rad2deg(np.arctan2(*np.mean(np.array(all_parabolas_directions[i])[:averaging_length], axis=0))))
+    for i in range(len(complete_parabolas)):
+        averaging_length = min(len(complete_parabolas[i]), 5)
+        angles_end.append(np.rad2deg(np.arctan2(*np.mean(np.array(all_parabolas_directions[i])[-averaging_length:], axis=0))))
+        angles_start.append(np.rad2deg(np.arctan2(*np.mean(np.array(all_parabolas_directions[i])[:averaging_length], axis=0))))
 
 
-#     for intersection in intersections:
-#         tracks_indicies_with_intersection = []
+    for intersection in intersections:
+        tracks_indicies_with_intersection = []
 
-#         for i in range(len(complete_parabolas)):
-#             if (intersection == complete_parabolas[i]).all(1).any():
-#                 tracks_indicies_with_intersection.append(i)
+        for i in range(len(complete_parabolas)):
+            if (intersection == complete_parabolas[i]).all(1).any():
+                tracks_indicies_with_intersection.append(i)
 
-#         if len(tracks_indicies_with_intersection) > 1:
-#             angles_for_candidates = np.array([angles_end[i] for i in tracks_indicies_with_intersection])
-#             angles_for_candidates.sort()
-#             distances = np.diff(angles_for_candidates)
-#             print(f'Diffs={distances}')
-#             pair_id = distances.argmin()
-#             matched_pairs.append((complete_parabolas[tracks_indicies_with_intersection[pair_id]], complete_parabolas[tracks_indicies_with_intersection[pair_id + 1]]))
+        if len(tracks_indicies_with_intersection) > 1:
+            angles_for_candidates = np.array([angles_end[i] for i in tracks_indicies_with_intersection])
+            angles_for_candidates.sort()
+            distances = np.diff(angles_for_candidates)
+            print(f'Diffs={distances}')
+            pair_id = distances.argmin()
+            matched_pairs.append((complete_parabolas[tracks_indicies_with_intersection[pair_id]], complete_parabolas[tracks_indicies_with_intersection[pair_id + 1]]))
 
 
-#     # for i in range(len(complete_parabolas)):
-#     #     if i in used_indices:
-#     #         continue  # 如果片段已经匹配过，跳过 
-#     #     for j in range(i + 1, len(complete_parabolas)):
-#     #         if j in used_indices:
-#     #             continue  # 如果片段已经匹配过，跳过
+    # for i in range(len(complete_parabolas)):
+    #     if i in used_indices:
+    #         continue  # 如果片段已经匹配过，跳过 
+    #     for j in range(i + 1, len(complete_parabolas)):
+    #         if j in used_indices:
+    #             continue  # 如果片段已经匹配过，跳过
 
-#     #         # 判断方向是否相反
-#     #         if are_same_parabola(angles[i], angles[j]):# or are_same_parabola_1(angles[i], angles[j]):
-#     #             matched_pairs.append((complete_parabolas[i], complete_parabolas[j]))  # 匹配到同一条抛物线的两个片段
-#     #             used_indices.update([i, j])  # 标记这些片段已匹配
-#     #             break  # 退出内层循环
-#     #         else:
-#     #             print(f"片段{i} 和 片段{j} 方向角度差不符合180度,跳过")
+    #         # 判断方向是否相反
+    #         if are_same_parabola(angles[i], angles[j]):# or are_same_parabola_1(angles[i], angles[j]):
+    #             matched_pairs.append((complete_parabolas[i], complete_parabolas[j]))  # 匹配到同一条抛物线的两个片段
+    #             used_indices.update([i, j])  # 标记这些片段已匹配
+    #             break  # 退出内层循环
+    #         else:
+    #             print(f"片段{i} 和 片段{j} 方向角度差不符合180度,跳过")
 
-#     # if len(matched_pairs) * 2 < len(complete_parabolas):
-#     #     print("存在未匹配的片段")
+    # if len(matched_pairs) * 2 < len(complete_parabolas):
+    #     print("存在未匹配的片段")
     
-#     return matched_pairs
+    return matched_pairs
 
 
 def process_image(image_path):
@@ -642,7 +793,7 @@ def process_image(image_path):
   
     # # 追踪末点到交点的轨迹
     complete_parabolas, all_parabolas_directions = find_complete_parabolas(intersections_coords, parabolas_ends, img_bw_skeleton)
-    
+    check_parabolas_endpoints(complete_parabolas)
     # parabolas_ids_to_remove = []
 
     # for i in range(len(all_parabolas_directions)):
@@ -664,21 +815,26 @@ def process_image(image_path):
     cv2.imshow('img', color_img)
     cv2.imwrite(f'transitions_Marked/transitions_Marked_10_{os.path.basename(image_path)}', color_img)
     cv2.waitKey()
-
+      
     matched = match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections_coords, parabolas_ends)
     # colors = [(0, 255, 0), (255, 255, 0), (255, 0, 255), (255, 165, 0)]  
-    colors = [(0, 255, 0), (255, 0, 0)]
+    # colors = [(0, 255, 0), (255, 0, 0)]
+    colors = [(0, 255, 0),  # 绿色
+          (255, 0, 0),  # 红色
+          (0, 0, 255),  # 蓝色
+          (255, 255, 0)]  # 黄色
+
     for idx, pair in enumerate(matched):
         color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
-        # for part in pair:
-            # for point in part:
-            #     cv2.circle(color_img, (point[1], point[0]), 5, color, -1)  # 使用不同的颜色标记每个片段
-        for part_index in pair:
-        # 通过索引获取实际的抛物线片段
-            part = complete_parabolas[part_index]
-            for point in part:  # 现在 part 是抛物线片段，可以迭代点
-                cv2.circle(color_img, (point[1], point[0]), 5, color, -1)
-                print(f"抛物线 {idx + 1} 已用颜色 {color} 标记。")
+        for part in pair:
+            for point in part:
+                cv2.circle(color_img, (point[1], point[0]), 5, color, -1)  # 使用不同的颜色标记每个片段
+        # for part_index in pair:
+        # # 通过索引获取实际的抛物线片段
+        #     part = complete_parabolas[part_index]
+        #     for point in part:  # 现在 part 是抛物线片段，可以迭代点
+        #         cv2.circle(color_img, (point[1], point[0]), 5, color, -1)
+        #         print(f"抛物线 {idx + 1} 已用颜色 {color} 标记。")
     
     cv2.imshow('matched parabola', color_img)
     cv2.imwrite(f'transitions_Marked/transitions_Marked_9_{os.path.basename(image_path)}', color_img)
