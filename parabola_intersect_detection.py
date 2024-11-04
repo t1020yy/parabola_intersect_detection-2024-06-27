@@ -191,7 +191,7 @@ def find_intersections_with_morphologic(skeleton_image):
    
     intersections_coords = np.nonzero(hitormiss_intersections == 255)
 
-    intersections_coords = tuple(np.array([x, y]) for x, y in zip(*intersections_coords))
+    intersections_coords = tuple(np.array([x, y]) for y, x in zip(*intersections_coords))
 
     kernels = []
 
@@ -218,36 +218,12 @@ def find_intersections_with_morphologic(skeleton_image):
         hitormiss_tracks_end = cv2.bitwise_or(hitormiss, hitormiss_tracks_end)
 
     parabolas_ends = np.nonzero(hitormiss_tracks_end == 255)
-    parabolas_ends = tuple(np.array([x, y]) for x, y in zip(*parabolas_ends))
+    parabolas_ends = tuple(np.array([x, y]) for y, x in zip(*parabolas_ends))
 
     return intersections_coords, parabolas_ends
 
 
-def filter_intersections_by_distance(intersections_coords, min_distance = 10):
-    """
-    过滤交点，使得任意两个交点之间的距离大于设定的最小距离。
-    
-    :param intersections_coords: 初始交点坐标列表
-    :param min_distance: 保留交点的最小距离
-    :return: 过滤后的交点坐标列表
-    """
-    filtered_intersections = []
-
-    for i, point2 in enumerate(intersections_coords):
-        keep_point = True
-        for j, point1 in enumerate(filtered_intersections):
-            dist = np.linalg.norm(np.array(point2) - np.array(point1))
-            if dist < min_distance:
-                keep_point = False
-                break
-
-        if keep_point:
-            filtered_intersections.append(point2)
-
-    return np.array(filtered_intersections)
-
-
-def label_and_filter_connected_components(img, min_size = 150): #计算连通区域，减小较少的像素区。
+def label_and_filter_connected_components(img, min_size = 120): #计算连通区域，减小较少的像素区。
     """
     对二值图像进行连通组件标记，过滤掉较小的连通区域，并返回过滤后的图像。
     
@@ -271,17 +247,6 @@ def label_and_filter_connected_components(img, min_size = 150): #计算连通区
     return filtered_img
 
 
-def points_are_close(point1, point2, tolerance=1e-5):
-    """
-    判断两个点是否接近，允许一定的容差。
-    支持 NumPy 数组和 Python 元组的比较。
-    """
-    if isinstance(point1, np.ndarray) and isinstance(point2, np.ndarray):
-        return np.all(np.abs(point1 - point2) < tolerance)
-    else:
-        return abs(point1[0] - point2[0]) < tolerance and abs(point1[1] - point2[1]) < tolerance
-
-
 def track_parabola_until_target(start_point, img, target_point, points_used):
     """
     通用的轨迹追踪函数，用于追踪末点到交点或交点到交点。
@@ -298,52 +263,56 @@ def track_parabola_until_target(start_point, img, target_point, points_used):
     # track_directions_in_deg = np.rad2deg(np.arctan2(np.array(track_directions)[:, 0], np.array(track_directions)[:, 1]))
 
     first_point = True
-    wait_key_period = 1
+    wait_key_period = 1000
 
     previous_direction = (0, 0)
 
     while len(parabalas_points) == 0 or point_founded:
         parabalas_points.append((c_x, c_y))
-        points_used[c_x, c_y] = True
+        points_used[c_y, c_x] = True
         point_founded = False
     
         # # Display tracking
         # color_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         # color_img[img == 1] = (255, 0, 0)
         # color_img[points_used] = (255, 255, 255)
-        # color_img[target_point[:,0], target_point[:,1], :] = (0, 0, 255)
-        # cv2.drawMarker(color_img, (c_y, c_x), (0, 255, 0), cv2.MARKER_SQUARE, 5)
+        # color_img[target_point[:,1], target_point[:,0], :] = (0, 0, 255)
+        # cv2.drawMarker(color_img, (c_x, c_y), (0, 255, 0), cv2.MARKER_SQUARE, 5)
         # cv2.namedWindow('img', cv2.WINDOW_NORMAL)  # 使用WINDOW_NORMAL，允许调整窗口大小
+        # cv2.resizeWindow('img', 800, 600)
+        # cv2.namedWindow('img_zoomed', cv2.WINDOW_NORMAL)
+        # cv2.resizeWindow('img', 800, 600)
 
         # # 设置窗口的尺寸，例如宽 800 像素，高 600 像素
-        # cv2.resizeWindow('img', 1700, 1200)
         # cv2.imshow('img', color_img)
+        # cv2.imshow('img_zoomed', color_img[c_y-30:c_y+30, c_x-30:c_x+30])
         # k = cv2.waitKey(wait_key_period)
 
         # if k == 27:
         #     wait_key_period = 1
         
         if not first_point and np.any(np.all(np.array([c_x, c_y]) == target_point, axis=1)):
-            print(f"Reached target intersection at: ({c_x}, {c_y})")
+            print(f"Reached target intersection at: ({c_y}, {c_x})")
             # Убираем точку из использованных, чтобы можно было попасть на конечную точку при проходе повторно
-            points_used[c_x, c_y] = False
+            points_used[c_y, c_x] = False
             point_founded = True
             break
-
-        first_point = False
 
         # 遍历所有方向，寻找下一个点
         for direction in track_directions:
             t_x = c_x + direction[0]
             t_y = c_y + direction[1]
-            # if img[t_x, t_y] == 1 and (direction[0] != -previous_direction[0] and direction[1] != -previous_direction[1]) and not points_used[t_x, t_y]:
-            if img[t_x, t_y] == 1 and not points_used[t_x, t_y]:
+            if img[t_y, t_x] == 1 and (
+                (direction[0] != -previous_direction[0] or previous_direction[0] == 0) and
+                (direction[1] != -previous_direction[1] or previous_direction[1] == 0) or first_point) and not points_used[t_y, t_x]:
                 parabola_directions.append((t_x - c_x, t_y - c_y))
                 previous_direction = direction
-                c_x = t_x
                 c_y = t_y
+                c_x = t_x
                 point_founded = True                
                 break
+
+        first_point = False
 
     # Приводим порядок точек единообразно слева на право
     if parabalas_points[0][0] > parabalas_points[-1][0]:
@@ -502,7 +471,7 @@ def trace_parabolas(start_point, complete_parabolas):
             break
         
     if current_parabola is None:
-        return connected_parabolas  # 如果没有匹配的片段，返回
+        return connected_parabolas, None  # 如果没有匹配的片段，返回
         
     # 将当前点标记为已处理
     processed_points.add(tuple(start_point))
@@ -527,7 +496,7 @@ def trace_parabolas(start_point, complete_parabolas):
         if not candidate_parabolas:
             break
 
-        if len(current_parabola) < 20 and len(connected_parabolas) > 1:
+        if len(current_parabola) < 30 and len(connected_parabolas) > 1:
             best_parabola, _ = find_best_parabola(next_start_point, candidate_parabolas, connected_parabolas[-2])
         else:
             best_parabola, _ = find_best_parabola(next_start_point, candidate_parabolas, current_parabola)
@@ -544,30 +513,24 @@ def trace_parabolas(start_point, complete_parabolas):
             next_start_point = current_parabola[-1]   
         # previous_residuals = best_residuals
 
-    return connected_parabolas   
+    last_end_point = next_start_point
 
-def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends, color_img):
+    return connected_parabolas, last_end_point 
+
+def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections, parabolas_ends):
     """匹配抛物线片段，并根据拟合的系数和残差找到相同抛物线的段。"""
 
     matched_pairs = []  # 用于保存所有起始点追踪到的片段链
     processed_points = set()
-    colors = [(0, 255, 0), (255, 255, 0), (255, 0, 255), (255, 165, 0), (255, 0, 0), (0, 0, 255), (255, 192, 203), (128, 0, 128), (0, 0, 128), (255, 140, 0), (169, 169, 169)]
-    color_index = 0 
 
     for end_point in parabolas_ends:
         # 跳过已处理的 end_point
         if tuple(end_point) in processed_points:
             continue
-        connected_parabolas = trace_parabolas(end_point, complete_parabolas)
+        connected_parabolas, last_end_point = trace_parabolas(end_point, complete_parabolas)
 
-
-        color = colors[color_index % len(colors)]
-        color_index += 1  
-        for parabola in connected_parabolas:
-            for point in parabola:
-                cv2.circle(color_img, (point[1], point[0]), 3, color, -1)  # 使用不同的颜色标记每个片段
-        # cv2.imshow('img', color_img)
-        # cv2.waitKey()
+        if last_end_point is not None:
+            processed_points.add(tuple(last_end_point))
 
         if connected_parabolas:
             matched_pairs.append(connected_parabolas)
@@ -577,6 +540,10 @@ def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersect
 def process_image(image_path):
     # Read image in grayscale
     img_np = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    img_np[:3,:] = 0
+    img_np[-4:,:] = 0
+    img_np[:,:3] = 0
+    img_np[:,-4:] = 0
     # Display the image
     cv2.namedWindow('img', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('img', 1000, 800)
@@ -614,59 +581,48 @@ def process_image(image_path):
     color_img[img_bw_skeleton == 1] = (255, 255, 255)
 
     for point in intersections_coords:
-        cv2.circle(color_img, (point[1], point[0]), 0, (0, 0, 255), -1)  # 用绿色标记过滤后的交点
-        print(f"交点标记在: ({point[1]}, {point[0]})")
+        cv2.circle(color_img, point, 0, (0, 0, 255), -1)  # 用绿色标记过滤后的交点
+        print(f"交点标记在: ({point[0]}, {point[1]})")
           
     for idx, point in enumerate(parabolas_ends):
-        cv2.circle(color_img, (point[1], point[0]), 0, (0, 255, 255), -1)  # 用红色圆圈标记端点
+        cv2.circle(color_img, point, 0, (0, 255, 255), -1)  # 用红色圆圈标记端点
         # 在端点旁边标注数字
-        cv2.putText(color_img, str(idx + 1), (point[1] + 10, point[0] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-        print(f"端点 {idx + 1} 标记在: ({point[1]}, {point[0]})")
+        cv2.putText(color_img, str(idx + 1), (point[0] + 10, point[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+        print(f"端点 {idx + 1} 标记在: ({point[0]}, {point[1]})")
 
     cv2.namedWindow('intersection', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('intersection', 800, 600)
-
+  
+    #删除后又加的
     for point in intersections_coords:
-        cropped_img = color_img[point[0] - 25:point[0] + 25, point[1] - 25:point[1] + 25]
+        cropped_img = color_img[point[1] - 25:point[1] + 25, point[0] - 25:point[0] + 25]
         resized_img = cv2.resize(cropped_img, (800, 600), interpolation=cv2.INTER_NEAREST)
         cv2.imshow('intersection', resized_img)
         cv2.waitKey()
-
-    
-    # cv2.destroyWindow('intersection')
-  
+        
     # # 追踪末点到交点的轨迹
     complete_parabolas, all_parabolas_directions = find_complete_parabolas(intersections_coords, parabolas_ends, img_bw_skeleton)
     check_parabolas_endpoints(complete_parabolas)
-    # parabolas_ids_to_remove = []
 
-    # for i in range(len(all_parabolas_directions)):
-    #     if len(all_parabolas_directions[i]) < 1:
-    #         parabolas_ids_to_remove.append(i)
-    # for id in parabolas_ids_to_remove[-1::-1]:
-    #     complete_parabolas.pop(id)
-    #     all_parabolas_directions.pop(id)
- 
     colors = [(0, 255, 0), (255, 0, 0), (255, 0, 255), (255, 165, 0), (255, 255, 0), (0, 0, 255), (255, 192, 203), (128, 0, 128), (0, 0, 128), (255, 140, 0), (169, 169, 169)]  # 绿色、黄色、紫色、青色
     for idx, parabola in enumerate(complete_parabolas):
         color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
         for point in parabola:
-            cv2.circle(color_img, (point[1], point[0]), 1, color, -1)  # 使用不同的颜色标记每个片段
+            cv2.circle(color_img, point, 1, color, -1)  # 使用不同的颜色标记每个片段
 
-    # cv2.imshow('img', color_img[choose_coords[0]-40:choose_coords[0]+40,choose_coords[1]-40:choose_coords[1]+40])
-    # cv2.waitKey()
 
     cv2.imshow('img', color_img)
     cv2.imwrite(f'transitions_Marked/transitions_Marked_10_{os.path.basename(image_path)}', color_img)
     cv2.waitKey()
       
-    matched = match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections_coords, parabolas_ends, color_img)[:2]
+    matched = match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections_coords, parabolas_ends)[:2]
    
     for idx, pair in enumerate(matched):
         color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
         for part in pair:
             for point in part:
-                cv2.circle(color_img, (point[1], point[0]), 5, color, -1)  # 使用不同的颜色标记每个片段
+                cv2.circle(color_img, point, 5, color, -1)  # 使用不同的颜色标记每个片段
+
         # for part_index in pair:
         # # 通过索引获取实际的抛物线片段
         #     part = complete_parabolas[part_index]
@@ -680,7 +636,19 @@ def process_image(image_path):
 
 # List of image file paths
 image_files = ["output/final_img1_combined_0.bmp", "output/final_img1_combined_1.bmp", "output/final_img1_combined_2.bmp", "output/final_img1_combined_3.bmp", "output/final_img1_combined_4.bmp", "output/final_img1_combined_5.bmp", "output/final_img1_combined_6.bmp", "output/final_img1_combined_7.bmp", "output/final_img1_combined_8.bmp", "output/final_img1_combined_9.bmp"]
-image_files_1 = ["output_1/final_img1_combined_8.bmp", "output_1/final_img1_combined_7.bmp","output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_4.bmp",  "output_1/final_img1_combined_6.bmp", "output_1/final_img1_combined_9.bmp", "output_1/final_img1_combined_1.bmp", "output_1/final_img1_combined_3.bmp","output_1/final_img1_combined_0.bmp"]
+image_files_1 = ["output_1/final_img1_combined_0.bmp", "output_1/final_img1_combined_1.bmp",
+                 "output_1/final_img1_combined_2.bmp", "output_1/final_img1_combined_3.bmp",  
+                 "output_1/final_img1_combined_4.bmp", "output_1/final_img1_combined_6.bmp", 
+                 "output_1/final_img1_combined_7.bmp", "output_1/final_img1_combined_8.bmp",
+                 "output_1/final_img1_combined_9.bmp"]
+image_files_2 = ["output_2/final_img1_combined_2.bmp", "output_2/final_img1_combined_3.bmp", 
+                 "output_2/final_img1_combined_8.bmp", 
+                   "output_2/final_img1_combined_11.bmp", "output_2/final_img1_combined_13.bmp", 
+                   "output_2/final_img1_combined_5.bmp", "output_2/final_img1_combined_0.bmp",
+                   "output_2/final_img1_combined_4.bmp", "output_2/final_img1_combined_6.bmp", 
+                   "output_2/final_img1_combined_12.bmp", "output_2/final_img1_combined_7.bmp", 
+                   "output_2/final_img1_combined_14.bmp"]
+
 
 # Process each image
 for image_path in image_files_1:
