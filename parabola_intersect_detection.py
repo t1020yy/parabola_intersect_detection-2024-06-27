@@ -352,55 +352,6 @@ def find_complete_parabolas(intersections_coords, parabolas_ends, img):
             all_parabolas_directions.append(parabola_directions)
     return all_parabolas, all_parabolas_directions
 
-
-def calculate_direction(point1, point2):
-    """
-    计算从 point1 到 point2 的方向角度（以度为单位）。
-    """
-    delta_x = point2[0] - point1[0]
-    delta_y = point2[1] - point1[1]
-    angle = np.rad2deg(np.arctan2(delta_y, delta_x))  # 计算方向角度
-    print(f"Point1: {point1}, Point2: {point2}, Angle: {angle}")
-    return angle
-
-def are_same_parabola(direction1, direction2):
-    """
-    判断两个方向是否相反，且方向角度之和接近 180 度。
-    """
-    angle_diff = abs(direction1 - direction2) % 360  # 计算角度差
-    print(f"Comparing directions: {direction1} vs {direction2}, angle_diff = {angle_diff}")
-    if abs(angle_diff - 180) < 15:  # 判断方向角度和是否接近 180 度（容差10度）
-        return True
-    return False
-
-def distance_condition(parabola1, parabola2, max_distance):
-    """
-    检查两个抛物线片段之间的距离是否在允许范围内
-    :param parabola1: 第一个抛物线片段
-    :param parabola2: 第二个抛物线片段
-    :param max_distance: 判断是否属于同一抛物线的最大距离
-    :return: 如果距离条件满足则返回 True，否则返回 False
-    """
-    # 获取两个抛物线片段的起点和终点
-    start1, end1 = parabola1[0], parabola1[-1]
-    start2, end2 = parabola2[0], parabola2[-1]
-
-    # 判断两条抛物线的起点和终点之间的距离
-    dist1 = np.linalg.norm(np.array(start1) - np.array(start2))
-    dist2 = np.linalg.norm(np.array(end1) - np.array(end2))
-
-    return dist1 < max_distance and dist2 < max_distance
-
-def check_parabolas_endpoints(complete_parabolas):
-    """打印所有抛物线片段的起点和终点的坐标"""
-    for i, parabola in enumerate(complete_parabolas):
-        parabola = np.array(parabola)  # 确保转换为 numpy 数组
-        start_point = parabola[0]  # 片段的起点
-        end_point = parabola[-1]   # 片段的终点
-        distance = np.linalg.norm(end_point - start_point)
-        print(f"Parabola {i}: Start Point = {start_point}, End Point = {end_point}, Distance = {distance}")
-   
-# best_parabola, _ = find_best_parabola(next_start_point, candidate_parabolas, connected_parabolas[-2])
 def find_best_parabola(next_start_point, candidate_parabolas, current_parabola):
     """找到与 current_tracking_point 相连的最佳片段，基于残差差异选择."""
     best_residuals = 100000
@@ -537,6 +488,45 @@ def match_parabola_parts(complete_parabolas, all_parabolas_directions, intersect
 
     return matched_pairs
 
+
+def filter_all_parabolas(all_parabolas, all_parabolas_directions):
+    """
+    遍历所有抛物线部分的像素，过滤掉相同方向的像素，只保留对角线。
+    
+    :param all_parabolas: 所有的抛物线部分
+    :param all_parabolas_directions: 所有抛物线的方向
+    :return: 处理后的所有抛物线和方向
+    """
+    processed_all_parabolas = []
+    processed_all_directions = []
+
+    for parabola_part, directions in zip(all_parabolas, all_parabolas_directions):
+        i = 0  # 初始化索引
+        while i < len(parabola_part) - 2:  # 每次读取三个点
+            x, y = parabola_part[i]
+            x_1, y_1 = parabola_part[i + 1]
+            x_2, y_2 = parabola_part[i + 2]
+        
+            # 定义完整的 2x2 矩阵的四个顶点
+            possible_matrix_points = [
+                {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)},  # 起始点在左上角
+                {(x, y), (x - 1, y), (x, y + 1), (x - 1, y + 1)},  # 起始点在左下角
+                {(x, y), (x + 1, y), (x, y - 1), (x + 1, y - 1)},  # 起始点在右上角
+                {(x, y), (x - 1, y), (x, y - 1), (x - 1, y - 1)}   # 起始点在右下角
+                ]
+            
+            if any({(x, y), (x_1, y_1), (x_2, y_2)}.issubset(matrix) for matrix in possible_matrix_points):
+                del parabola_part[i + 1]
+                del directions[i + 1]
+
+            i += 1
+        
+        processed_all_parabolas.append(parabola_part)
+        processed_all_directions.append(directions)
+
+    return processed_all_parabolas, processed_all_directions
+
+
 def process_image(image_path):
     # Read image in grayscale
     img_np = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
@@ -568,10 +558,9 @@ def process_image(image_path):
     img_bw_skeleton = zhang_suen_thinning_optimized((img_filtered // 255))
     # Display the thinned image
     # cv2.imshow('img', (img_bw_skeleton * 255).astype(np.uint8))
+    # cv2.imwrite(f'transitions_Marked/transitions_Marked_7_{os.path.basename(image_path)}', (img_bw_skeleton * 255).astype(np.uint8))
     # cv2.waitKey()
 
-    # Find intersections
-    # intersections_coords, parabolas_ends = find_intersections(img_bw_skeleton)
     intersections_coords, parabolas_ends = find_intersections_with_morphologic(img_bw_skeleton)
     print(f"intersections_coords: {intersections_coords}")
 
@@ -602,7 +591,7 @@ def process_image(image_path):
         
     # # 追踪末点到交点的轨迹
     complete_parabolas, all_parabolas_directions = find_complete_parabolas(intersections_coords, parabolas_ends, img_bw_skeleton)
-    check_parabolas_endpoints(complete_parabolas)
+    processed_all_parabolas, processed_all_directions = filter_all_parabolas(complete_parabolas, all_parabolas_directions)
 
     colors = [(0, 255, 0), (255, 0, 0), (255, 0, 255), (255, 165, 0), (255, 255, 0), (0, 0, 255), (255, 192, 203), (128, 0, 128), (0, 0, 128), (255, 140, 0), (169, 169, 169)]  # 绿色、黄色、紫色、青色
     for idx, parabola in enumerate(complete_parabolas):
@@ -610,12 +599,11 @@ def process_image(image_path):
         for point in parabola:
             cv2.circle(color_img, point, 1, color, -1)  # 使用不同的颜色标记每个片段
 
-
     cv2.imshow('img', color_img)
     cv2.imwrite(f'transitions_Marked/transitions_Marked_10_{os.path.basename(image_path)}', color_img)
     cv2.waitKey()
       
-    matched = match_parabola_parts(complete_parabolas, all_parabolas_directions, intersections_coords, parabolas_ends)[:2]
+    matched = match_parabola_parts(processed_all_parabolas, processed_all_directions, intersections_coords, parabolas_ends)
    
     for idx, pair in enumerate(matched):
         color = colors[idx % len(colors)]  # 每个片段使用不同的颜色
@@ -649,9 +637,19 @@ image_files_2 = ["output_2/final_img1_combined_2.bmp", "output_2/final_img1_comb
                    "output_2/final_img1_combined_12.bmp", "output_2/final_img1_combined_7.bmp", 
                    "output_2/final_img1_combined_14.bmp"]
 
+image_files_3 = ["output_3/final_img1_combined_0.bmp", "output_3/final_img2_combined_0.bmp", 
+                 "output_3/final_img1_combined_1.bmp", "output_3/final_img2_combined_1.bmp", 
+                 "output_3/final_img1_combined_2.bmp", "output_3/final_img2_combined_2.bmp", 
+                 "output_3/final_img1_combined_3.bmp", "output_3/final_img2_combined_3.bmp", 
+                 "output_3/final_img1_combined_4.bmp", "output_3/final_img2_combined_4.bmp", 
+                 "output_3/final_img1_combined_5.bmp", "output_3/final_img2_combined_5.bmp", 
+                 "output_3/final_img1_combined_6.bmp", "output_3/final_img2_combined_6.bmp", 
+                 "output_3/final_img1_combined_7.bmp", "output_3/final_img2_combined_7.bmp", 
+                 "output_3/final_img1_combined_8.bmp", "output_3/final_img2_combined_8.bmp", 
+                 "output_3/final_img1_combined_9.bmp", "output_3/final_img2_combined_9.bmp"]
 
 # Process each image
-for image_path in image_files_1:
+for image_path in image_files_3:
     process_image(image_path)
 
 cv2.destroyAllWindows()
